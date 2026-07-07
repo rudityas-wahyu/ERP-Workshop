@@ -1,128 +1,164 @@
-'use client';
-import { useEffect, useState, use } from 'react';
-import { supabase } from '@/src/lib/supabase';
-import { useSettingsStore } from '@/src/store/settings';
-import CurrencyInput from '@/src/components/CurrencyInput';
-import EditQueueDetailsModal from '@/src/components/modals/EditQueueDetailsModal';
-import AppLayout from '@/src/components/AppLayout';
-import { useRouter } from 'next/navigation';
 
-export default function OrderDetails({ params }: { params: Promise<{ id: string }> }) {
+'use client';
+
+import { useState, useEffect, useCallback, use } from 'react';
+import AppLayout from '@/src/components/AppLayout';
+import { supabase } from '@/src/lib/supabase';
+import { useRouter } from 'next/navigation';
+import EditQueueDetailsModal from '@/src/components/modals/EditQueueDetailsModal';
+import CurrencyInput from '@/src/components/CurrencyInput';
+
+export default function WorkshopDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
+  const orderId = resolvedParams.id;
   const router = useRouter();
-  const unwrappedParams = use(params);
-  const orderId = unwrappedParams.id;
+
   const [order, setOrder] = useState<any>(null);
   const [parts, setParts] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Checkout State
+
+  // Modals
+  const [showEditDetails, setShowEditDetails] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
-  const { formatCurrency, workshopName, workshopAddress, workshopPhone } = useSettingsStore();
   const [showReceipt, setShowReceipt] = useState(false);
-  const [receiptId, setReceiptId] = useState('');
+
+  // Add Part State
+  const [selectedPartId, setSelectedPartId] = useState('');
+  const [partQuantity, setPartQuantity] = useState(1);
+  const [isAddingPart, setIsAddingPart] = useState(false);
+
+  // Checkout State
   const [discount, setDiscount] = useState(0);
   const [taxAmount, setTaxAmount] = useState(0);
-    const [paymentMethod, setPaymentMethod] = useState('QRIS');
+  const [paymentMethod, setPaymentMethod] = useState('QRIS');
   const [amountPaid, setAmountPaid] = useState(0);
-  const [showEditDetails, setShowEditDetails] = useState(false);
 
-  useEffect(() => {
-    fetchData();
-  }, [orderId]);
+  // Print Receipt Config
+  const [workshopName, setWorkshopName] = useState('Guitar Workshop');
+  const [workshopAddress, setWorkshopAddress] = useState('123 Music St.\nCity, Country');
+  const [workshopPhone, setWorkshopPhone] = useState('+1 234 567 890');
+  const [receiptId, setReceiptId] = useState('');
 
-  const fetchData = async () => {
-    setLoading(true);
-    const { data: orderData } = await supabase.from('workshop_queue').select('*').eq('id', orderId).single();
+  const fetchData = useCallback(async (showLoader = false) => {
+    if (!orderId) return;
+    if (showLoader) setLoading(true);
+
+    const { data: orderData, error: orderErr } = await supabase.from('workshop_queue').select('*').eq('id', orderId).single();
+    const { data: partsData } = await supabase.from('workshop_parts').select('*, inventory:inventory_id(*)').eq('queue_id', orderId);
+    const { data: invData } = await supabase.from('inventory').select('*').order('product_name', { ascending: true });
+
     if (orderData) {
       setOrder(orderData);
-            const { data: partsData } = await supabase.from('service_parts').select('*, inventory(*)').eq('service_id', orderId);
-      setParts(partsData || []);
+    } else if (orderErr) {
+      console.error(orderErr);
     }
-    const { data: invData } = await supabase.from('inventory').select('*').gt('stock', 0);
-    setInventory(invData || []);
-    setLoading(false);
-  };
 
-  
-    
-  const addPart = async (inventoryId: number, price: number) => {
-    const existing = parts.find(p => p.inventory_id === inventoryId);
-    if (existing) {
-      await supabase.from('service_parts').update({ quantity: existing.quantity + 1 }).eq('id', existing.id);
-    } else {
-      await supabase.from('service_parts').insert([{
-        service_id: orderId,
-        inventory_id: inventoryId,
-        quantity: 1,
-        price_per_unit: price
-      }]);
+    if (partsData) setParts(partsData);
+    if (invData) setInventory(invData);
+
+    const { data: settings } = await supabase.from('settings').select('*');
+    if (settings) {
+      settings.forEach(s => {
+        if (s.key === 'workshop_name') setWorkshopName(s.value);
+        if (s.key === 'workshop_address') setWorkshopAddress(s.value);
+        if (s.key === 'workshop_phone') setWorkshopPhone(s.value);
+      });
     }
+
+    setLoading(false);
+  }, [orderId]);
+
+  useEffect(() => {
+    fetchData(true);
+  }, [fetchData]);
+
+  const addPart = async () => {
+    if (!selectedPartId || partQuantity < 1) return;
+    setIsAddingPart(true);
+
+    const selectedInv = inventory.find(i => i.id === selectedPartId);
+    if (!selectedInv) { setIsAddingPart(false); return; }
+
+    const price = selectedInv.retail_price || 0;
+
+    await supabase.from('workshop_parts').insert({
+      queue_id: orderId,
+      inventory_id: selectedPartId,
+      quantity: partQuantity,
+      price_per_unit: price
+    });
+
+    setPartQuantity(1);
+    setSelectedPartId('');
+    setIsAddingPart(false);
     fetchData();
   };
 
-  const updatePartQuantity = async (partId: number, delta: number) => {
+  const removePart = async (partId: string) => {
+    await supabase.from('workshop_parts').delete().eq('id', partId);
+    fetchData();
+  };
+
+  const updatePartQuantity = async (partId: string, delta: number) => {
     const part = parts.find(p => p.id === partId);
     if (!part) return;
-    const newQ = part.quantity + delta;
-    if (newQ > 0) {
-      await supabase.from('service_parts').update({ quantity: newQ }).eq('id', partId);
-    } else {
-      await supabase.from('service_parts').delete().eq('id', partId);
+    const newQuantity = part.quantity + delta;
+    if (newQuantity < 1) {
+      removePart(partId);
+      return;
     }
+    await supabase.from('workshop_parts').update({ quantity: newQuantity }).eq('id', partId);
     fetchData();
   };
 
-  const removePart = async (partId: number) => {
-    await supabase.from('service_parts').delete().eq('id', partId);
-    fetchData();
+  const handleCheckout = async () => {
+    const newReceiptId = 'INV-' + Math.floor(100000 + Math.random() * 900000);
+    setReceiptId(newReceiptId);
+
+    const partsTotal = parts.reduce((acc, p) => acc + (p.price_per_unit * p.quantity), 0);
+    const subtotal = (order.estimated_fee || 0) + partsTotal - (order.has_down_payment ? order.down_payment_amount : 0);
+    const total = subtotal - discount + taxAmount;
+
+    // Deduct inventory
+    for (const part of parts) {
+      const inv = inventory.find(i => i.id === part.inventory_id);
+      if (inv) {
+        await supabase.from('inventory').update({ stock: Math.max(0, inv.stock - part.quantity) }).eq('id', inv.id);
+      }
+    }
+
+    // Save transaction
+    await supabase.from('transactions').insert({
+      type: 'receipt',
+      category: 'workshop',
+      amount: total,
+      description: `Workshop Receipt ${newReceiptId} - ${order.service_id}`,
+      payment_method: paymentMethod
+    });
+
+    // Update Status
+    await supabase.from('workshop_queue').update({ status: 'Completed', final_fee: total }).eq('id', orderId);
+    
+    setShowCheckout(false);
+    setShowReceipt(true);
   };
 
-  const partsTotal = parts.reduce((acc, part) => acc + (part.price_per_unit * part.quantity), 0);
-  const subtotal = (order?.estimated_fee || 0) + partsTotal;
-  
+  const formatCurrency = (val: number) => {
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
+  };
+
+  if (loading) return <AppLayout><div className="flex justify-center py-20 text-zinc-500">Loading...</div></AppLayout>;
+  if (!order) return <AppLayout><div className="flex justify-center py-20 text-zinc-500">Order not found</div></AppLayout>;
+
+  const partsTotal = parts.reduce((acc, p) => acc + (p.price_per_unit * p.quantity), 0);
+  const downPayment = order.has_down_payment ? order.down_payment_amount : 0;
+  const subtotal = (order.estimated_fee || 0) + partsTotal - downPayment;
   const total = subtotal - discount + taxAmount;
   const changeAmount = amountPaid - total;
 
-  const handleCheckout = async () => {
-    if (amountPaid < total && paymentMethod === 'Cash') return alert('Insufficient amount paid');
-    const { count } = await supabase.from('receipts').select('*', { count: 'exact', head: true }).like('receipt_id', 'REC-%');
-    const nextId = (count || 0) + 1;
-    const receipt_id = 'REC-' + nextId.toString().padStart(2, '0');
-    
-    // Save Receipt
-    await supabase.from('receipts').insert([{
-      service_id: orderId,
-      receipt_id,
-      subtotal,
-      discount_amount: discount,
-      tax_amount: taxAmount,
-      total,
-      payment_method: paymentMethod,
-      amount_paid: amountPaid,
-      change_amount: paymentMethod === 'Cash' ? changeAmount : 0
-    }]);
-
-    // Update Status
-    await supabase.from('workshop_queue').update({ status: 'Done', final_fee: total }).eq('id', orderId);
-
-    setReceiptId(receipt_id);
-    setShowReceipt(true);
-    setShowCheckout(false);
-    router.push('/');
-  };
-
-  if (loading) return <AppLayout><div className="p-8 text-zinc-500">Loading order details...</div></AppLayout>;
-  if (!order) return <AppLayout><div className="p-8 text-zinc-500">Order not found</div></AppLayout>;
-
   return (
-    <AppLayout
-      headerAction={
-        <button onClick={() => router.push('/')} className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors text-zinc-300 rounded-md font-medium text-xs tracking-tight shadow-sm">
-          Back to Queue
-        </button>
-      }
-    >
+    <AppLayout>
       <EditQueueDetailsModal 
         isOpen={showEditDetails} 
         onClose={() => setShowEditDetails(false)} 
@@ -132,68 +168,100 @@ export default function OrderDetails({ params }: { params: Promise<{ id: string 
       <div className="max-w-5xl mx-auto space-y-6 pb-12">
         <div className="flex justify-between items-start">
           <div>
+            <button onClick={() => router.push('/')} className="mb-4 text-xs font-medium text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors">
+              &larr; Back to Dashboard
+            </button>
             <h1 className="text-2xl font-medium tracking-tight text-zinc-100">{order.service_id}</h1>
             <p className="text-sm text-zinc-500 mt-1">{order.customer_name} • {order.guitar_brand} {order.guitar_model}</p>
           </div>
-          <span className={`px-3 py-1 rounded-md text-xs font-medium uppercase tracking-wider border ${
-            order.status === 'Done' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
-            order.status === 'In Progress' ? 'bg-zinc-800 text-zinc-300 border-zinc-700/50' : 
-            'bg-zinc-900 text-zinc-400 border-zinc-800'
-          }`}>
-            {order.status}
-          </span>
+          <div className="flex items-center gap-3">
+            <select
+              value={order.status}
+              onChange={async (e) => {
+                const newStatus = e.target.value;
+                await supabase.from('workshop_queue').update({ status: newStatus }).eq('id', orderId);
+                fetchData();
+              }}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium uppercase tracking-wider border outline-none cursor-pointer transition-colors ${
+                order.status === 'Completed' ? 'bg-transparent text-zinc-400 border-zinc-600' : 
+                order.status === 'Done' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20' : 
+                order.status === 'In Progress' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20' : 
+                'bg-zinc-900 text-zinc-400 border-zinc-800 hover:bg-zinc-800'
+              }`}
+            >
+              <option value="Queued" className="bg-zinc-900 text-zinc-300">QUEUED</option>
+              <option value="In Progress" className="bg-zinc-900 text-zinc-300">IN PROGRESS</option>
+              <option value="Done" className="bg-zinc-900 text-zinc-300">DONE</option>
+              <option value="Completed" className="bg-zinc-900 text-zinc-300">COMPLETED</option>
+            </select>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
           {/* Order Info */}
           <div className="md:col-span-2 space-y-6">
             <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-xl p-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xs font-mono uppercase text-zinc-500 tracking-widest">Service Details</h2>
-                <button onClick={() => setShowEditDetails(true)} className="text-[10px] uppercase font-medium tracking-wider text-emerald-400 hover:text-emerald-300">Edit</button>
+                {order.status !== 'Completed' && (
+                  <button onClick={() => setShowEditDetails(true)} className="text-[10px] uppercase font-medium tracking-wider text-emerald-400 hover:text-emerald-300">Edit</button>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-zinc-500 mb-1">Problem Description</p>
-                  <p className="text-zinc-200">{order.problem_description}</p>
+                  <p className="text-zinc-200">{order.problem_description || "N/A"}</p>
                 </div>
                 <div>
                   <p className="text-zinc-500 mb-1">Technician</p>
-                  <p className="text-zinc-200">{order.technician}</p>
+                  <p className="text-zinc-200">{order.technician || "Unassigned"}</p>
                 </div>
                 <div>
                   <p className="text-zinc-500 mb-1">Serial Number</p>
-                  <p className="text-zinc-200 font-mono text-xs">{order.serial_number || 'N/A'}</p>
+                  <p className="text-zinc-200">{order.serial_number || "N/A"}</p>
                 </div>
                 <div>
                   <p className="text-zinc-500 mb-1">Est. Pickup Date</p>
-                  <p className="text-zinc-200 font-mono text-xs">{order.pickup_date || 'N/A'}</p>
+                  <p className="text-zinc-200 font-mono text-xs mt-1.5">{order.pickup_date || "N/A"}</p>
                 </div>
               </div>
             </div>
 
+            {/* Parts Used */}
             <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-xl p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xs font-mono uppercase text-zinc-500 tracking-widest">Parts Used</h2>
-                {order.status !== 'Done' && (
+              <h2 className="text-xs font-mono uppercase text-zinc-500 tracking-widest mb-4">Parts Used</h2>
+              
+              {order.status !== 'Completed' && (
+                <div className="flex gap-2 mb-6">
                   <select 
-                    onChange={(e) => {
-                      if(e.target.value) {
-                        const inv = inventory.find(i => i.id === parseInt(e.target.value));
-                        if(inv) addPart(inv.id, inv.selling_price);
-                        e.target.value = "";
-                      }
-                    }}
-                    className="bg-zinc-950 border border-zinc-800 rounded-md text-xs text-zinc-300 px-2 py-1 outline-none"
+                    value={selectedPartId} 
+                    onChange={e => setSelectedPartId(e.target.value)}
+                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-700"
                   >
-                    <option value="">+ Add Part...</option>
-                    {inventory.map(inv => (
-                      <option key={inv.id} value={inv.id}>{inv.product_name} - {formatCurrency(inv.selling_price)}</option>
+                    <option value="">Select Part from Inventory...</option>
+                    {inventory.map(item => (
+                      <option key={item.id} value={item.id} disabled={item.stock < 1}>
+                        {item.product_name || item.item_name} - {formatCurrency(item.retail_price || 0)} ({item.stock} left)
+                      </option>
                     ))}
                   </select>
-                )}
-              </div>
-              
+                  <input 
+                    type="number" 
+                    min="1"
+                    value={partQuantity}
+                    onChange={e => setPartQuantity(parseInt(e.target.value) || 1)}
+                    className="w-20 bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-700"
+                  />
+                  <button 
+                    onClick={addPart}
+                    disabled={isAddingPart || !selectedPartId}
+                    className="px-4 py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Add Part
+                  </button>
+                </div>
+              )}
+
               {parts.length === 0 ? (
                 <p className="text-sm text-zinc-500 italic">No parts added yet.</p>
               ) : (
@@ -202,7 +270,7 @@ export default function OrderDetails({ params }: { params: Promise<{ id: string 
                     <div key={part.id} className="flex justify-between items-center text-sm border-b border-zinc-800/50 pb-2">
                       <div className="text-zinc-300 flex items-center gap-3">
                         <span>{part.inventory?.product_name || part.inventory?.item_name || 'Part'}</span>
-                        {order.status !== 'Done' ? (
+                        {order.status !== 'Completed' ? (
                           <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded">
                             <button onClick={() => updatePartQuantity(part.id, -1)} className="w-5 h-5 flex justify-center items-center text-zinc-400 hover:text-white">-</button>
                             <span className="text-xs w-4 text-center">{part.quantity}</span>
@@ -214,7 +282,7 @@ export default function OrderDetails({ params }: { params: Promise<{ id: string 
                       </div>
                       <div className="flex items-center gap-4">
                         <span className="text-zinc-300 font-medium">{formatCurrency(part.price_per_unit * part.quantity)}</span>
-                        {order.status !== 'Done' && (
+                        {order.status !== 'Completed' && (
                           <button onClick={() => removePart(part.id)} className="text-rose-400 hover:text-rose-300 text-xs">Remove</button>
                         )}
                       </div>
@@ -226,18 +294,21 @@ export default function OrderDetails({ params }: { params: Promise<{ id: string 
           </div>
 
           {/* Billing & Checkout */}
-          <div className="space-y-6">
-            <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-6 shadow-xl">
-              <h2 className="text-xs font-mono uppercase text-zinc-500 tracking-widest border-b border-zinc-800 pb-2 mb-4">Billing Summary</h2>
+          <div className="md:col-span-1">
+            <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-6 sticky top-6">
+              <h2 className="text-xs font-mono uppercase text-zinc-500 tracking-widest mb-6">Billing Summary</h2>
+              
               <div className="space-y-3 text-sm">
-                <div className="flex justify-between text-zinc-400">
+                <div className="flex justify-between text-zinc-300">
                   <span>Est. Service Fee</span>
-                  <span>{formatCurrency(order.estimated_fee)}</span>
+                  <span>{formatCurrency(order.estimated_fee || 0)}</span>
                 </div>
+                
                 <div className="flex justify-between text-zinc-400">
                   <span>Parts Total</span>
                   <span>{formatCurrency(partsTotal)}</span>
                 </div>
+
                 {order.has_down_payment && (
                   <div className="flex justify-between text-emerald-400/80">
                     <span>Down Payment</span>
@@ -253,7 +324,7 @@ export default function OrderDetails({ params }: { params: Promise<{ id: string 
                 </div>
               </div>
 
-              {order.status !== 'Done' && (
+              {order.status !== 'Completed' && (
                 <button 
                   onClick={() => setShowCheckout(true)}
                   className="w-full mt-6 py-2.5 bg-zinc-100 hover:bg-white text-zinc-900 rounded-md text-sm font-medium transition-colors shadow-sm"
@@ -431,6 +502,5 @@ export default function OrderDetails({ params }: { params: Promise<{ id: string 
         </div>
       )}
     </AppLayout>
-
   );
 }

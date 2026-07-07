@@ -56,11 +56,11 @@ export default function Home() { const { formatCurrency } = useSettingsStore();
       
       
       
-      const activeRepairsCount = (queueData || []).filter((q: any) => q.status !== 'Done').length;
+      const activeRepairsCount = (queueData || []).filter((q: any) => q.status !== 'Completed').length;
       const lowStockCount = (invData || []).filter((i: any) => i.stock <= 2).length;
       
       // Get all completed repairs to calculate turnaround
-      const { data: completedQueue } = await supabase.from('workshop_queue').select('*').eq('status', 'Done');
+      const { data: completedQueue } = await supabase.from('workshop_queue').select('*').eq('status', 'Completed');
       let avgTurnaround = 0;
       if (completedQueue && completedQueue.length > 0) {
         // Just mock calculation or use a real one if timestamps exist, for now just show a simple static or dynamic number
@@ -160,6 +160,7 @@ export default function Home() { const { formatCurrency } = useSettingsStore();
                     <td className="px-6 py-4 text-xs text-zinc-300">{item.problem_description || "N/A"}</td>
                     <td className="px-6 py-4">
                       <span className={`whitespace-nowrap px-2.5 py-1 rounded-md text-[10px] font-medium tracking-wide uppercase border ${
+                        item.status === 'Completed' ? 'bg-transparent text-zinc-400 border-zinc-600' :
                         item.status === 'Done' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
                         item.status === 'In Progress' ? 'bg-zinc-800 text-zinc-300 border-zinc-700/50' : 
                         'bg-zinc-900 text-zinc-400 border-zinc-800'
@@ -167,7 +168,7 @@ export default function Home() { const { formatCurrency } = useSettingsStore();
                         {item.status}
                       </span>
                     </td>
-                    <td className={`px-6 py-4 text-xs font-mono ${item.status === 'Done' ? 'text-emerald-400' : 'text-zinc-400'}`}>
+                    <td className={`px-6 py-4 text-xs font-mono ${item.status === 'Completed' ? 'text-zinc-400' : item.status === 'Done' ? 'text-emerald-400' : 'text-zinc-400'}`}>
                       {item.pickup_date || "N/A"}
                     </td>
                     <td className="px-6 py-4 font-medium text-zinc-100">{formatCurrency(item.estimated_fee || 0)}</td>

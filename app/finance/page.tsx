@@ -4,7 +4,7 @@ import AppLayout from '@/src/components/AppLayout';
 import { supabase } from '@/src/lib/supabase';
 import { useSettingsStore } from '@/src/store/settings';
 import CurrencyInput from '@/src/components/CurrencyInput';
-import { DollarSign, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Calendar } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Calendar, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import RecordPastServiceModal from '@/src/components/modals/RecordPastServiceModal';
 import EditTransactionModal from '@/src/components/modals/EditTransactionModal';
 
@@ -21,6 +21,10 @@ export default function Finance() {
   const [manualDate, setManualDate] = useState(new Date().toISOString().split('T')[0]);
   const [manualDesc, setManualDesc] = useState('');
   const [manualAmount, setManualAmount] = useState(0);
+  const [filterMonth, setFilterMonth] = useState('all');
+  const [filterType, setFilterType] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   useEffect(() => {
     fetchData();
@@ -60,11 +64,6 @@ export default function Finance() {
     }
   };
 
-  // Calculate totals
-  const totalInvoiceRev = invoices.filter(i => i.status === 'Paid').reduce((acc, curr) => acc + curr.amount, 0);
-  const totalReceiptRev = receipts.reduce((acc, curr) => acc + curr.total, 0);
-  const totalRevenue = totalInvoiceRev + totalReceiptRev;
-  
   const allTransactions = [
     ...invoices.filter(i => i.status === 'Paid').map(i => ({
       id: i.id,
@@ -84,6 +83,41 @@ export default function Finance() {
     }))
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+  const availableMonths = Array.from(new Set(allTransactions.map(tx => {
+    const d = new Date(tx.date);
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+  }))).sort().reverse();
+
+  const filteredTransactions = allTransactions.filter(tx => {
+    const d = new Date(tx.date);
+    const txMonth = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+    const matchMonth = filterMonth === 'all' || txMonth === filterMonth;
+    const matchType = filterType === 'all' || tx.type === filterType;
+    return matchMonth && matchType;
+  });
+
+  const totalPages = Math.ceil(filteredTransactions.length / ITEMS_PER_PAGE) || 1;
+  const paginatedTransactions = filteredTransactions.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  // Calculate totals based on filtered data
+  const filteredInvoiceRev = filteredTransactions.filter(t => t.type === 'Invoice / POS').reduce((acc, curr) => acc + curr.amount, 0);
+  const filteredPOSRev = filteredTransactions.filter(t => t.type === 'POS Receipt').reduce((acc, curr) => acc + curr.amount, 0);
+  const filteredServiceRev = filteredTransactions.filter(t => t.type === 'Service Receipt').reduce((acc, curr) => acc + curr.amount, 0);
+  
+  const totalRetailRev = filteredInvoiceRev + filteredPOSRev;
+  const totalRevenue = totalRetailRev + filteredServiceRev;
+  
+  // reset page if filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterMonth, filterType]);
+
+  const formatMonth = (m: string) => {
+    if (m === 'all') return 'All Time';
+    const [year, month] = m.split('-');
+    const d = new Date(parseInt(year), parseInt(month) - 1);
+    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
   return (
     <AppLayout
       headerAction={
@@ -100,7 +134,7 @@ export default function Finance() {
       <div className="max-w-6xl mx-auto w-full space-y-8 pb-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-zinc-900/30 border border-zinc-800/50 p-6 rounded-xl flex flex-col justify-between hover:border-zinc-700/50 transition-colors">
-            <p className="text-[10px] font-mono tracking-widest text-zinc-500 uppercase mb-2">Total Revenue (All Time)</p>
+            <p className="text-[10px] font-mono tracking-widest text-zinc-500 uppercase mb-2">Total Revenue</p>
             <div className="flex items-baseline gap-2 mt-auto">
               <p className="text-3xl font-semibold tracking-tight text-emerald-400">{formatCurrency(totalRevenue)}</p>
             </div>
@@ -109,14 +143,14 @@ export default function Finance() {
           <div className="bg-zinc-900/30 border border-zinc-800/50 p-6 rounded-xl flex flex-col justify-between hover:border-zinc-700/50 transition-colors">
             <p className="text-[10px] font-mono tracking-widest text-zinc-500 uppercase mb-2">POS & Retail</p>
             <div className="flex items-baseline gap-2 mt-auto">
-              <p className="text-2xl font-semibold tracking-tight text-zinc-100">{formatCurrency(totalInvoiceRev)}</p>
+              <p className="text-2xl font-semibold tracking-tight text-zinc-100">{formatCurrency(totalRetailRev)}</p>
             </div>
           </div>
 
           <div className="bg-zinc-900/30 border border-zinc-800/50 p-6 rounded-xl flex flex-col justify-between hover:border-zinc-700/50 transition-colors">
             <p className="text-[10px] font-mono tracking-widest text-zinc-500 uppercase mb-2">Workshop Services</p>
             <div className="flex items-baseline gap-2 mt-auto">
-              <p className="text-2xl font-semibold tracking-tight text-zinc-100">{formatCurrency(totalReceiptRev)}</p>
+              <p className="text-2xl font-semibold tracking-tight text-zinc-100">{formatCurrency(filteredServiceRev)}</p>
             </div>
           </div>
         </div>
@@ -124,9 +158,25 @@ export default function Finance() {
         <div className="bg-zinc-900/20 border border-zinc-800/50 rounded-xl flex flex-col overflow-hidden">
           <div className="px-6 py-5 border-b border-zinc-800/50 flex justify-between items-center bg-zinc-950/50">
             <h2 className="text-sm font-medium tracking-tight text-zinc-100">Combined Transaction History</h2>
-            <div className="text-xs text-zinc-500 flex items-center gap-2">
-              <Calendar className="w-3.5 h-3.5" />
-              Showing all recorded periods
+                        <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Filter className="w-3.5 h-3.5 text-zinc-500" />
+                <select value={filterType} onChange={e => setFilterType(e.target.value)} className="bg-transparent text-xs text-zinc-300 outline-none border border-zinc-800 rounded px-2 py-1 cursor-pointer">
+                  <option value="all" className="bg-zinc-900">All Types</option>
+                  <option value="Invoice / POS" className="bg-zinc-900">Invoice / POS</option>
+                  <option value="POS Receipt" className="bg-zinc-900">POS Receipt</option>
+                  <option value="Service Receipt" className="bg-zinc-900">Service Receipt</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Calendar className="w-3.5 h-3.5 text-zinc-500" />
+                <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="bg-transparent text-xs text-zinc-300 outline-none border border-zinc-800 rounded px-2 py-1 cursor-pointer">
+                  <option value="all" className="bg-zinc-900">All Periods</option>
+                  {availableMonths.map(m => (
+                    <option key={m} value={m} className="bg-zinc-900">{formatMonth(m)}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
           <div className="w-full overflow-x-auto">
@@ -146,12 +196,12 @@ export default function Finance() {
                   <tr>
                     <td colSpan={5} className="px-6 py-8 text-center text-zinc-500 text-xs">Loading financial data...</td>
                   </tr>
-                ) : allTransactions.length === 0 ? (
+                ) : filteredTransactions.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-8 text-center text-zinc-500 text-xs">No transactions recorded yet</td>
                   </tr>
                 ) : (
-                  allTransactions.map((tx, idx) => (
+                  paginatedTransactions.map((tx, idx) => (
                     <tr key={`${tx.ref}-${idx}`} className="hover:bg-zinc-900/30 transition-colors">
                       <td className="px-6 py-4 text-xs font-mono text-zinc-400">
                         {new Date(tx.date).toLocaleDateString()}
@@ -181,6 +231,30 @@ export default function Finance() {
               </tbody>
             </table>
           </div>
+          {totalPages > 1 && (
+            <div className="px-6 py-4 border-t border-zinc-800/50 flex items-center justify-between bg-zinc-950/30">
+              <div className="text-xs text-zinc-500">
+                Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredTransactions.length)} of {filteredTransactions.length} entries
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1 text-zinc-400 hover:text-zinc-100 disabled:opacity-50 transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-xs text-zinc-300 font-medium px-2">{currentPage} / {totalPages}</span>
+                <button 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-1 text-zinc-400 hover:text-zinc-100 disabled:opacity-50 transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
