@@ -62,7 +62,7 @@ export default function WorkshopQueuePage() {
 
   return (
     <AppLayout>
-      <div className="max-w-6xl mx-auto space-y-6 pb-12">
+      <div className="w-full px-4 space-y-6 pb-12">
         <div className="flex justify-between items-end">
           <div>
             <h1 className="text-2xl font-medium tracking-tight text-zinc-100">All Workshop Queue</h1>

@@ -131,7 +131,7 @@ export default function Finance() {
         </div>
       }
     >
-      <div className="max-w-6xl mx-auto w-full space-y-8 pb-12">
+      <div className="w-full px-4 w-full space-y-8 pb-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-zinc-900/30 border border-zinc-800/50 p-6 rounded-xl flex flex-col justify-between hover:border-zinc-700/50 transition-colors">
             <p className="text-[10px] font-mono tracking-widest text-zinc-500 uppercase mb-2">Total Revenue</p>

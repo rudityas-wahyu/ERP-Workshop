@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect } from 'react';
 import { useSettingsStore } from '@/src/store/settings';
+import CurrencyInputField from 'react-currency-input-field';
 
 export default function CurrencyInput({
   value,
@@ -18,29 +18,22 @@ export default function CurrencyInput({
   const { currency } = useSettingsStore();
   const getCurrencySymbol = () => currency === 'IDR' ? 'Rp' : currency === 'EUR' ? '€' : '$';
   
-  const [displayValue, setDisplayValue] = useState(value === 0 ? '' : value.toString());
-
-  useEffect(() => {
-    if (value !== undefined && value.toString() !== displayValue.replace(/\\D/g, '')) {
-      setDisplayValue(value === 0 ? '' : value.toString());
-    }
-  }, [value]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/\\D/g, '');
-    setDisplayValue(raw);
-    onChange(Number(raw));
-  };
+  const decimalSeparator = currency === 'IDR' ? ',' : '.';
+  const groupSeparator = currency === 'IDR' ? '.' : ',';
 
   return (
     <div className="relative">
-      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500 font-medium">
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500 font-medium z-10 pointer-events-none">
         {getCurrencySymbol()}
       </span>
-      <input
-        type="text"
-        value={displayValue}
-        onChange={handleChange}
+      <CurrencyInputField
+        value={value === 0 ? '' : value}
+        onValueChange={(val, name, values) => {
+          onChange(values?.float || 0);
+        }}
+        decimalSeparator={decimalSeparator}
+        groupSeparator={groupSeparator}
+        decimalsLimit={currency === 'IDR' ? 0 : 2}
         placeholder={placeholder}
         required={required}
         className={className}
