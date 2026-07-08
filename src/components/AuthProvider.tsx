@@ -6,13 +6,14 @@ import { useSettingsStore } from '@/src/store/settings';
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, login } = useAuthStore();
-  const { workshopName, logoUrl } = useSettingsStore();
+  const { workshopName, logoUrl, fetchSettings } = useSettingsStore();
   const [mounted, setMounted] = useState(false);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
     setMounted(true);
+    fetchSettings();
   }, []);
 
   if (!mounted) return null;

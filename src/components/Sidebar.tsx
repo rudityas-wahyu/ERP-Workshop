@@ -8,7 +8,8 @@ import { useState } from 'react';
 import Image from 'next/image';
 
 const navigation = [
-  { name: 'Workshop Queue', href: '/', icon: Settings },
+    { name: 'Dashboard', href: '/', icon: Settings },
+  { name: 'Workshop Queue', href: '/workshop', icon: FileText },
   { name: 'Inventory', href: '/inventory', icon: Package },
   { name: 'Point of Sale', href: '/sales', icon: ShoppingCart },
   { name: 'Invoices', href: '/invoices', icon: FileText },

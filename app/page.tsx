@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import AppLayout from '@/src/components/AppLayout';
 import { supabase } from '@/src/lib/supabase';
 import { useSettingsStore } from '@/src/store/settings';
@@ -33,9 +34,16 @@ export default function Home() { const { formatCurrency } = useSettingsStore();
 
   const fetchData = useCallback(async () => {
     try {
-      const { data: queueData, error: queueError } = await supabase.from('workshop_queue').select('*').limit(5);
+      const { data: queueData, error: queueError } = await supabase.from('workshop_queue').select('*').order('created_at', { ascending: false });
       if (queueError) setConnError(queueError.message);
-      if (queueData && !queueError) setQueue(queueData);
+      if (queueData && !queueError) {
+        const sortedQueue = [...queueData].sort((a, b) => {
+          if (a.status === 'Completed' && b.status !== 'Completed') return 1;
+          if (b.status === 'Completed' && a.status !== 'Completed') return -1;
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        }).slice(0, 5);
+        setQueue(sortedQueue);
+      }
 
       const { data: invData, error: invError } = await supabase.from('inventory').select('*').limit(3);
       if (invData && !invError) setInventory(invData);
@@ -132,9 +140,8 @@ export default function Home() { const { formatCurrency } = useSettingsStore();
         <div className="w-full bg-zinc-900/20 border border-zinc-800/50 rounded-xl flex flex-col overflow-hidden shrink-0">
           <div className="px-6 py-5 border-b border-zinc-800/50 flex justify-between items-center bg-zinc-950/50">
             <h2 className="text-sm font-medium tracking-tight text-zinc-100">Workshop Queue</h2>
-            <div className="flex gap-2">
-              <span className="px-3 py-1 bg-zinc-900 border border-zinc-800/50 text-xs rounded-md text-zinc-300 shadow-sm cursor-pointer hover:bg-zinc-800">All Status</span>
-              <span className="px-3 py-1 bg-zinc-900 border border-zinc-800/50 text-xs rounded-md text-zinc-300 shadow-sm cursor-pointer hover:bg-zinc-800">Priority</span>
+            <div className="flex gap-4 items-center">
+              <Link href="/workshop" className="text-zinc-400 text-xs cursor-pointer hover:text-zinc-100 transition-colors">View All</Link>
             </div>
           </div>
           <div className="w-full overflow-x-auto">
