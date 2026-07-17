@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/src/lib/supabase';
 import CurrencyInput from '@/src/components/CurrencyInput';
+import { useUIStore } from '@/src/store/ui';
 
 export default function EditInventoryModal({ isOpen, onClose, onSuccess, item }: { isOpen: boolean; onClose: () => void; onSuccess: () => void; item: any }) {
   const [sku, setSku] = useState('');
@@ -58,7 +59,7 @@ export default function EditInventoryModal({ isOpen, onClose, onSuccess, item }:
       onSuccess();
       onClose();
     } else {
-      alert("Error updating inventory: " + error.message);
+      addToast("Error updating inventory: " + error.message, 'error');
     }
   };
 

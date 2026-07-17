@@ -7,8 +7,10 @@ import CurrencyInput from '@/src/components/CurrencyInput';
 import { DollarSign, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Calendar, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import RecordPastServiceModal from '@/src/components/modals/RecordPastServiceModal';
 import EditTransactionModal from '@/src/components/modals/EditTransactionModal';
+import { useUIStore } from '@/src/store/ui';
 
 export default function Finance() {
+  const { addToast } = useUIStore();
   const [invoices, setInvoices] = useState<any[]>([]);
   const [receipts, setReceipts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +35,7 @@ export default function Finance() {
   const fetchData = async () => {
     setLoading(true);
     const { data: invs } = await supabase.from('invoices').select('*').order('created_at', { ascending: false });
-    const { data: recs } = await supabase.from('receipts').select('*, workshop_queue(service_id)').order('created_at', { ascending: false });
+    const { data: recs } = await supabase.from('receipts').select('*, workshop_queue(*)').order('created_at', { ascending: false });
     
     setInvoices(invs || []);
     setReceipts(recs || []);
@@ -54,13 +56,13 @@ export default function Finance() {
     }]);
 
     if (!error) {
-      alert("Historical record added successfully");
+      addToast("Historical record added success", 'success');
       setShowManualAdd(false);
       setManualDesc('');
       setManualAmount(0);
       fetchData();
     } else {
-      alert("Error adding record: " + error.message);
+      addToast("Error adding record: " + error.message, 'error');
     }
   };
 
@@ -77,7 +79,7 @@ export default function Finance() {
       id: r.id,
       date: r.created_at,
       ref: r.receipt_id,
-      desc: r.receipt_id?.startsWith('POS') ? 'Retail Sale' : 'Workshop Service ' + (r.workshop_queue?.service_id || r.service_id),
+      desc: r.receipt_id?.startsWith('POS') ? (r.payment_method && r.payment_method.includes('|') ? 'Retail Sale||' + r.payment_method.split('|')[1] : 'Retail Sale') : 'Workshop Service ' + (r.workshop_queue?.service_id || r.service_id) + '||' + (r.workshop_queue?.guitar_brand || '') + ' ' + (r.workshop_queue?.guitar_model || '') + ' | ' + (r.workshop_queue?.problem_description || ''),
       amount: r.total,
       type: r.receipt_id?.startsWith('POS') ? 'POS Receipt' : 'Service Receipt'
     }))
@@ -209,8 +211,15 @@ export default function Finance() {
                       <td className="px-6 py-4 text-xs font-mono text-zinc-500">
                         {tx.ref}
                       </td>
-                      <td className="px-6 py-4 text-xs text-zinc-200">
-                        {tx.desc}
+                      <td className="px-6 py-4 text-xs">
+                        {tx.desc?.includes('||') ? (
+                          <>
+                            <div className="text-zinc-200 font-medium">{tx.desc.split('||')[0]}</div>
+                            <div className="text-zinc-500 text-[10px] mt-0.5 whitespace-normal max-w-[300px]">{tx.desc.split('||')[1]}</div>
+                          </>
+                        ) : (
+                          <span className="text-zinc-200">{tx.desc}</span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <span className="px-2 py-1 bg-zinc-900 border border-zinc-800 text-[10px] font-medium rounded-md text-zinc-400">

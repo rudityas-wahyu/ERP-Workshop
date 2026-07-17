@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/src/lib/supabase';
 import { useSettingsStore } from '@/src/store/settings';
 import CurrencyInput from '@/src/components/CurrencyInput';
+import { useUIStore } from '@/src/store/ui';
 
 export default function EditTransactionModal({ 
   isOpen, 
@@ -76,7 +77,7 @@ export default function EditTransactionModal({
       onSuccess();
       onClose();
     } else {
-      alert("Error updating transaction: " + error.message);
+      addToast("Error updating transaction: " + error.message, 'error');
     }
   };
 
@@ -112,7 +113,16 @@ export default function EditTransactionModal({
           <div className="border-t border-b border-zinc-200 py-4 mb-4 space-y-2">
             <div className="flex justify-between text-sm">
               <span>Description</span>
-              <span className="font-medium text-right max-w-[200px]">{transaction.desc}</span>
+              <div className="text-right max-w-[200px]">
+                {transaction.desc?.includes('||') ? (
+                  <div className="flex flex-col">
+                    <span className="font-medium">{transaction.desc.split('||')[0]}</span>
+                    <span className="text-zinc-500 text-[10px] font-normal mt-0.5">{transaction.desc.split('||')[1]}</span>
+                  </div>
+                ) : (
+                  <span className="font-medium">{transaction.desc}</span>
+                )}
+              </div>
             </div>
           </div>
 

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { supabase } from '@/src/lib/supabase';
 import { useSettingsStore } from '@/src/store/settings';
 import CurrencyInput from '@/src/components/CurrencyInput';
+import { useUIStore } from '@/src/store/ui';
 
 export default function CreateOrderModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose: () => void; onSuccess: () => void }) {
   const [customerName, setCustomerName] = useState('');
@@ -54,7 +55,7 @@ export default function CreateOrderModal({ isOpen, onClose, onSuccess }: { isOpe
       onSuccess();
       onClose();
     } else {
-      alert("Error creating order: " + error.message);
+      addToast("Error creating order: " + error.message, 'error');
     }
   };
 

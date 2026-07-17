@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { supabase } from '@/src/lib/supabase';
 import CurrencyInput from '@/src/components/CurrencyInput';
+import { useUIStore } from '@/src/store/ui';
 
 export default function AddInventoryModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose: () => void; onSuccess: () => void }) {
   const [sku, setSku] = useState('');
@@ -42,7 +43,7 @@ export default function AddInventoryModal({ isOpen, onClose, onSuccess }: { isOp
       onSuccess();
       onClose();
     } else {
-      alert("Error adding inventory: " + error.message);
+      addToast("Error adding inventory: " + error.message, 'error');
     }
   };
 

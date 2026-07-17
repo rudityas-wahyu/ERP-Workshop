@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/src/lib/supabase';
 import CurrencyInput from '@/src/components/CurrencyInput';
+import { useUIStore } from '@/src/store/ui';
 
 export default function EditQueueDetailsModal({ 
   isOpen, 
@@ -62,7 +63,7 @@ export default function EditQueueDetailsModal({
       onSuccess();
       onClose();
     } else {
-      alert("Error updating details: " + error.message);
+      addToast("Error updating details: " + error.message, 'error');
     }
   };
 

@@ -7,8 +7,11 @@ import { supabase } from '@/src/lib/supabase';
 import { useRouter } from 'next/navigation';
 import EditQueueDetailsModal from '@/src/components/modals/EditQueueDetailsModal';
 import CurrencyInput from '@/src/components/CurrencyInput';
+import { Trash2 } from 'lucide-react';
+import { useUIStore } from '@/src/store/ui';
 
 export default function WorkshopDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { addToast, showConfirm } = useUIStore();
   const resolvedParams = use(params);
   const orderId = resolvedParams.id;
   const router = useRouter();
@@ -43,9 +46,13 @@ export default function WorkshopDetailPage({ params }: { params: Promise<{ id: s
   const fetchData = useCallback(async (showLoader = false) => {
     if (!orderId) return;
     if (showLoader) setLoading(true);
-
     const { data: orderData, error: orderErr } = await supabase.from('workshop_queue').select('*').eq('id', orderId).single();
-    const { data: partsData } = await supabase.from('workshop_parts').select('*, inventory:inventory_id(*)').eq('queue_id', orderId);
+    const { data: rawPartsData, error: partsErr } = await supabase.from('service_parts').select('*').eq('service_id', orderId);
+    console.log('rawPartsData fetched:', rawPartsData, 'for orderId:', orderId);
+    if (partsErr) {
+      console.error('parts err:', partsErr);
+      addToast('Parts fetch error: ' + partsErr.message, 'error');
+    }
     const { data: invData } = await supabase.from('inventory').select('*').order('product_name', { ascending: true });
 
     if (orderData) {
@@ -54,7 +61,16 @@ export default function WorkshopDetailPage({ params }: { params: Promise<{ id: s
       console.error(orderErr);
     }
 
-    if (partsData) setParts(partsData);
+    if (rawPartsData && invData) {
+      const partsWithInv = rawPartsData.map(p => ({
+        ...p,
+        inventory: invData.find(i => i.id === p.inventory_id)
+      }));
+      console.log('setting parts with inv:', partsWithInv);
+      setParts(partsWithInv);
+    } else if (rawPartsData) {
+      setParts(rawPartsData);
+    }
     if (invData) setInventory(invData);
 
     const { data: settings } = await supabase.from('settings').select('*');
@@ -77,17 +93,23 @@ export default function WorkshopDetailPage({ params }: { params: Promise<{ id: s
     if (!selectedPartId || partQuantity < 1) return;
     setIsAddingPart(true);
 
-    const selectedInv = inventory.find(i => i.id === selectedPartId);
+    const selectedInv = inventory.find(i => i.id.toString() === selectedPartId.toString());
     if (!selectedInv) { setIsAddingPart(false); return; }
 
-    const price = selectedInv.retail_price || 0;
+    const price = selectedInv.selling_price || 0;
 
-    await supabase.from('workshop_parts').insert({
-      queue_id: orderId,
-      inventory_id: selectedPartId,
+    console.log('Inserting part:', { service_id: parseInt(orderId as string, 10), inventory_id: parseInt(selectedPartId as string, 10), quantity: partQuantity, price_per_unit: price });
+    const { error, data: insertedData } = await supabase.from('service_parts').insert({
+
+      service_id: parseInt(orderId as string, 10),
+      inventory_id: parseInt(selectedPartId as string, 10),
       quantity: partQuantity,
       price_per_unit: price
     });
+    if (error) {
+      console.error(error);
+      addToast('Error adding part: ' + error.message, 'error');
+    }
 
     setPartQuantity(1);
     setSelectedPartId('');
@@ -95,12 +117,12 @@ export default function WorkshopDetailPage({ params }: { params: Promise<{ id: s
     fetchData();
   };
 
-  const removePart = async (partId: string) => {
-    await supabase.from('workshop_parts').delete().eq('id', partId);
+  const removePart = async (partId: any) => {
+    await supabase.from('service_parts').delete().eq('id', partId);
     fetchData();
   };
 
-  const updatePartQuantity = async (partId: string, delta: number) => {
+  const updatePartQuantity = async (partId: any, delta: number) => {
     const part = parts.find(p => p.id === partId);
     if (!part) return;
     const newQuantity = part.quantity + delta;
@@ -108,7 +130,7 @@ export default function WorkshopDetailPage({ params }: { params: Promise<{ id: s
       removePart(partId);
       return;
     }
-    await supabase.from('workshop_parts').update({ quantity: newQuantity }).eq('id', partId);
+    await supabase.from('service_parts').update({ quantity: newQuantity }).eq('id', partId);
     fetchData();
   };
 
@@ -175,6 +197,18 @@ export default function WorkshopDetailPage({ params }: { params: Promise<{ id: s
             <p className="text-sm text-zinc-500 mt-1">{order.customer_name} • {order.guitar_brand} {order.guitar_model}</p>
           </div>
           <div className="flex items-center gap-3">
+            <button 
+              onClick={async () => {
+                showConfirm('Are you sure you want to delete this workshop order?', async () => {
+                  await supabase.from('workshop_queue').delete().eq('id', orderId);
+                  router.push('/');
+                })
+              }}
+              className="p-2 bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 rounded-md transition-colors"
+              title="Delete Order"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
             <select
               value={order.status}
               onChange={async (e) => {
@@ -241,7 +275,7 @@ export default function WorkshopDetailPage({ params }: { params: Promise<{ id: s
                     <option value="">Select Part from Inventory...</option>
                     {inventory.map(item => (
                       <option key={item.id} value={item.id} disabled={item.stock < 1}>
-                        {item.product_name || item.item_name} - {formatCurrency(item.retail_price || 0)} ({item.stock} left)
+                        {item.product_name || item.item_name} - {formatCurrency(item.selling_price || 0)} | {item.stock} left
                       </option>
                     ))}
                   </select>
@@ -434,7 +468,10 @@ export default function WorkshopDetailPage({ params }: { params: Promise<{ id: s
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-zinc-500">Service:</span>
-                <span className="font-medium">{order.service_id}</span>
+                <div className="text-right max-w-[200px]">
+                  <div className="font-medium">{order.service_id}</div>
+                  <div className="text-zinc-500 text-[10px] font-normal mt-0.5">{order.guitar_brand} {order.guitar_model} | {order.problem_description}</div>
+                </div>
               </div>
             </div>
 

@@ -6,8 +6,10 @@ import { useAuthStore } from '@/src/store/auth';
 import { useState } from 'react';
 import Image from 'next/image';
 import { Store, UserCircle, Database, Image as ImageIcon } from 'lucide-react';
+import { useUIStore } from '@/src/store/ui';
 
 export default function SettingsPage() {
+  const { addToast } = useUIStore();
   const { currency, setCurrency, workshopName, workshopAddress, workshopPhone, logoUrl, setWorkshopDetails } = useSettingsStore();
   const { user, setUser, password, setPassword } = useAuthStore();
   const [name, setName] = useState(user?.name || '');
@@ -27,7 +29,7 @@ export default function SettingsPage() {
       setPassword(newPassword);
       setNewPassword('');
     }
-    alert('User info saved');
+    addToast('User info saved', 'info');
   };
 
   const handleSaveWorkshop = () => {
@@ -37,14 +39,14 @@ export default function SettingsPage() {
       workshopPhone: wPhone,
       logoUrl: wLogo
     });
-    alert('Workshop info saved');
+    addToast('Workshop info saved', 'info');
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 2 * 1024 * 1024) {
-        alert("File size must be less than 2MB.");
+        addToast("File size must be less than 2MB.", 'info');
         return;
       }
       const reader = new FileReader();

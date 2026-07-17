@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { supabase } from '@/src/lib/supabase';
+import { useUIStore } from '@/src/store/ui';
 
 export default function AddCustomerModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose: () => void; onSuccess: () => void }) {
   const [name, setName] = useState('');
@@ -37,7 +38,7 @@ export default function AddCustomerModal({ isOpen, onClose, onSuccess }: { isOpe
       onSuccess();
       onClose();
     } else {
-      alert("Error adding customer: " + error.message);
+      addToast("Error adding customer: " + error.message, 'error');
     }
   };
 

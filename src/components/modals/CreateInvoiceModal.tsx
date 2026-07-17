@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { supabase } from '@/src/lib/supabase';
 import CurrencyInput from '@/src/components/CurrencyInput';
+import { useUIStore } from '@/src/store/ui';
 
 export default function CreateInvoiceModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose: () => void; onSuccess: () => void }) {
   const [customer, setCustomer] = useState('');
@@ -36,7 +37,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onSuccess }: { isO
       onSuccess();
       onClose();
     } else {
-      alert("Error creating invoice");
+      addToast("Error", 'error');
     }
   };
 

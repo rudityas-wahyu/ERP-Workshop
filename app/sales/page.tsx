@@ -5,8 +5,10 @@ import { supabase } from '@/src/lib/supabase';
 import { useSettingsStore } from '@/src/store/settings';
 import CurrencyInput from '@/src/components/CurrencyInput';
 import { Search, Trash2 } from 'lucide-react';
+import { useUIStore } from '@/src/store/ui';
 
 export default function Sales() {
+  const { addToast } = useUIStore();
   const [inventory, setInventory] = useState<any[]>([]);
   const [cart, setCart] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,7 +89,7 @@ export default function Sales() {
   const changeAmount = amountPaid - total;
 
   const handleCheckout = async () => {
-    if (amountPaid < total && paymentMethod === 'Cash') return alert('Insufficient amount paid');
+    if (amountPaid < total && paymentMethod === 'Cash') return addToast('Insufficient amount paid', 'info');
     
     const { count } = await supabase.from('receipts').select('*', { count: 'exact', head: true }).like('receipt_id', 'POS-%');
     const receipt_id = 'POS-' + ((count || 0) + 1).toString().padStart(2, '0');
@@ -99,13 +101,13 @@ export default function Sales() {
       discount_amount: discount,
       tax_amount: taxAmount,
       total,
-      payment_method: paymentMethod,
+      payment_method: customerName ? `${paymentMethod}|${customerName}` : paymentMethod,
       amount_paid: amountPaid,
       change_amount: paymentMethod === 'Cash' ? changeAmount : 0
     }]).select().single();
 
     if (error) {
-      alert("Checkout failed: " + error.message);
+      addToast("Checkout failed: " + error.message, 'error');
       return;
     }
 
@@ -339,6 +341,12 @@ export default function Sales() {
                 <span className="text-zinc-500">Type:</span>
                 <span className="font-medium">Retail Sale</span>
               </div>
+              {customerName && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-zinc-500">Customer:</span>
+                  <span className="font-medium">{customerName}</span>
+                </div>
+              )}
             </div>
 
             <div className="border-t border-b border-zinc-200 py-4 mb-4 space-y-2">

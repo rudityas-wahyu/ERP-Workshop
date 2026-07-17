@@ -28,7 +28,7 @@ export default function Invoices() {
   const fetchData = async () => {
     setLoading(true);
     const { data: invs } = await supabase.from('invoices').select('*').order('created_at', { ascending: false });
-    const { data: recs } = await supabase.from('receipts').select('*, workshop_queue(service_id)').order('created_at', { ascending: false });
+    const { data: recs } = await supabase.from('receipts').select('*, workshop_queue(*)').order('created_at', { ascending: false });
     
     const all = [
       ...(invs || []).map(i => ({
@@ -44,7 +44,7 @@ export default function Invoices() {
         id: r.id,
         date: r.created_at,
         ref: r.receipt_id,
-        desc: r.receipt_id?.startsWith('POS') ? 'Retail Sale' : 'Workshop Service ' + (r.workshop_queue?.service_id || r.service_id),
+        desc: r.receipt_id?.startsWith('POS') ? (r.payment_method && r.payment_method.includes('|') ? 'Retail Sale||' + r.payment_method.split('|')[1] : 'Retail Sale') : 'Workshop Service ' + (r.workshop_queue?.service_id || r.service_id) + '||' + (r.workshop_queue?.guitar_brand || '') + ' ' + (r.workshop_queue?.guitar_model || '') + ' | ' + (r.workshop_queue?.problem_description || ''),
         amount: r.total,
         status: 'Paid',
         type: r.receipt_id?.startsWith('POS') ? 'POS Receipt' : 'Service Receipt'

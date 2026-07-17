@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/src/lib/supabase';
 import { useSettingsStore } from '@/src/store/settings';
 import CurrencyInput from '@/src/components/CurrencyInput';
+import { useUIStore } from '@/src/store/ui';
 
 export default function RecordPastServiceModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose: () => void; onSuccess: () => void }) {
   const [customerName, setCustomerName] = useState('');
@@ -63,7 +64,7 @@ export default function RecordPastServiceModal({ isOpen, onClose, onSuccess }: {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (paymentMethod === 'Cash' && amountPaid < total) return alert('Insufficient amount paid');
+    if (paymentMethod === 'Cash' && amountPaid < total) return addToast('Insufficient amount paid', 'info');
     setLoading(true);
     
     const { count } = await supabase.from('workshop_queue').select('*', { count: 'exact', head: true });
@@ -92,7 +93,7 @@ export default function RecordPastServiceModal({ isOpen, onClose, onSuccess }: {
     }]).select().single();
 
     if (orderError) {
-      alert("Error saving service order: " + orderError.message);
+      addToast("Error saving service order: " + orderError.message, 'error');
       setLoading(false);
       return;
     }
@@ -131,7 +132,7 @@ export default function RecordPastServiceModal({ isOpen, onClose, onSuccess }: {
       onSuccess();
       onClose();
     } else {
-      alert("Error saving receipt: " + receiptError.message);
+      addToast("Error saving receipt: " + receiptError.message, 'error');
     }
   };
 
